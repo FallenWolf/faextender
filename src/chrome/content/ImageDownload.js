@@ -13,25 +13,9 @@ com.neocodenetworks.faextender.ImageDownload = {
 		var prefs = com.neocodenetworks.faextender.Base.getPrefsService();
 		var jQuery = com.neocodenetworks.faextender.Base.getjQuery(doc);
 
-		// Use Download link
-		var url = jQuery("a:contains('Download')", jQuery("#submission"));
-		if (url.length == 0) {
-			// No download at all
-			com.neocodenetworks.faextender.Base.logError("Could not find download link, aborting");
-			return;
-		}
-		url = url.attr("href");
-		
-		var filelessurl = url.substr(0, url.lastIndexOf("/"));
-		var artist = filelessurl.substr((filelessurl.lastIndexOf("/") + 1));
-
-		// Check to see for non-pictures
-		if ((artist == "stories") || (artist == "poetry") || (artist == "music")) {
-			// Get artist name for non-pictures
-			var type = filelessurl.substr(0, filelessurl.lastIndexOf("/"));
-			var pre = filelessurl.substr(type.lastIndexOf("/") + 1);
-			artist = pre.substr(0, pre.lastIndexOf("/"));
-		}
+		// Get image URL
+		var components = com.neocodenetworks.faextender.Base.getDownloadUrlComponents(doc, jQuery);
+		if (!components) return;
 		
 		// Set up ID links
 		var downloadLink = jQuery("#__ext_fa_imgdl");
@@ -43,8 +27,7 @@ com.neocodenetworks.faextender.ImageDownload = {
 		}
 
 		// Find our download text injection point
-		var downloadInsertPos;
-		downloadInsertPos = jQuery(com.neocodenetworks.faextender.Base.getXPath(doc, "id('submission')/table/tbody/tr[1]/td/table/tbody/tr[1]/td"));
+		var downloadInsertPos = jQuery(com.neocodenetworks.faextender.Base.getXPath(doc, "id('submission')/table/tbody/tr[1]/td/table/tbody/tr[1]/td"));
 		if (downloadInsertPos.length == 0) {
 			// Can't find either
 			com.neocodenetworks.faextender.Base.logError("Bad download inject xpath, aborting");
@@ -73,27 +56,22 @@ com.neocodenetworks.faextender.ImageDownload = {
 					
 					// Re-fire after configuration
 					chgMsg("Please reload the page.", "Please reload the page to use the new settings.");
+					
 					//Color notification - Change background-color of Submission page according to file download status
 					if (prefs.getBoolPref("extensions.faext.colornotification.enable")) 
 					{
 						jQuery(com.neocodenetworks.faextender.Base.getXPath(doc, "id('submission')/table/tbody/tr[1]/td/table/tbody/tr[1]/td")).css("background-color","#F7941D"); //YELLOW
 						jQuery(com.neocodenetworks.faextender.Base.getXPath(doc, "id('submission')/table/tbody/tr[1]/td/table/tbody/tr[2]/td")).css("background-color","#F7941D"); //YELLOW
 					}
-					
 				}
 			});
 			return;
 		}
 		
 		// Pretty artist name support
+		var artist = components.artist;
 		if (prefs.prefHasUserValue("extensions.faext.download.prettyartist")) {
-			var artistName = jQuery(com.neocodenetworks.faextender.Base.getXPath(doc, "id('submission')/table/tbody/tr[1]/td/table/tbody/tr[2]/td/table[2]/tbody/tr[1]/td[1]/a")).text();
-			if (artistName) {
-				artist = artistName;
-			}
-			else {
-				com.neocodenetworks.faextender.Base.logError("Unable to retrieve pretty artist name, falling back on default");
-			}
+			artist = components.pretty_artist;
 		}
 
 		var fileObject = prefs.getComplexValue("extensions.faext.download.directory", Components.interfaces.nsILocalFile);
@@ -102,10 +80,9 @@ com.neocodenetworks.faextender.ImageDownload = {
 			fileObject.append(artist);
 		}
 
-		var fname = url.substr(url.lastIndexOf("/") + 1);
+		fileObject.append(components.filename);
 
-		var fext = fname.substr(fname.lastIndexOf(".") + 1);
-		if (fext == "") {
+		if (!components.extension) {
 			chgMsg("Error: No extension", "This file does not have an file extension. Please save it manually.");
 			//Color notification - Change background-color of Submission page according to file download status
 			if (prefs.getBoolPref("extensions.faext.colornotification.enable")) 
@@ -116,10 +93,8 @@ com.neocodenetworks.faextender.ImageDownload = {
 			return;
 		}
 
-		fileObject.append(fname);
-
 		if (fileObject.exists()) {
-			chgMsg("File already exists.","File " + fname + " already exists.");
+			chgMsg("File already exists.","File " + components.filename + " already exists.");
 			//Color notification - Change background-color of Submission page according to file download status
 			if (prefs.getBoolPref("extensions.faext.colornotification.enable")) 
 			{
@@ -129,8 +104,15 @@ com.neocodenetworks.faextender.ImageDownload = {
 			return;
 		}
 		
+		var tempObject = fileObject.clone();
+		tempObject.append(components.filename + ".faextmp");
+
+		if (tempObject.exists()) {
+			chgMsg("File operation already in progress.", "File " + components.filename + ".faextmp already exists.");
+		}
+		
 		// Store retrieval info directly into link for later
-		downloadLink.data("faext", {artist: artist, fname: fname, url: url, downloadSpan: downloadSpan, referrer: doc.location.href});
+		downloadLink.data("faext", {artist: artist, fname: components.filename, url: components.url, downloadSpan: downloadSpan, referrer: doc.location.href});
 
 		// Handle link onclick event
 		downloadLink.click(com.neocodenetworks.faextender.ImageDownload.DownloadClickEvent);
@@ -154,10 +136,13 @@ com.neocodenetworks.faextender.ImageDownload = {
 		var url = info.url;
 		var referrer = info.referrer;
 		var chgMsg = function(text,alt) {
-			info.downloadSpan.html(text);
-			info.downloadSpan.attr("title", alt);
+			try {
+				info.downloadSpan.html(text);
+				info.downloadSpan.attr("title", alt);
+			}
+			catch (err) { }
 		};
-	
+
 		try {
 			var fileObject = prefs.getComplexValue("extensions.faext.download.directory", Components.interfaces.nsILocalFile);
 
@@ -245,7 +230,7 @@ com.neocodenetworks.faextender.ImageDownload = {
 					{
 						var response = aRequest.QueryInterface(Components.interfaces.nsIHttpChannel);
 						if (response.requestSucceeded) {
-							chgMsg("File saved.","File " + fname + " saved.");
+							chgMsg("File saved.", "File " + fname + " saved.");
 							//Color notification - Change background-color of Submission page according to file download status
 							if (prefs.getBoolPref("extensions.faext.colornotification.enable")) 
 							{
@@ -278,10 +263,13 @@ com.neocodenetworks.faextender.ImageDownload = {
 							tempObject.remove(false);
 						}
 					}
-				}
-			}
+				},
+				onStatusChange: function(aWebProgress, aRequest, aStatus, aMessage) { }
+			};
 
-			persist.saveURI(uri, cachekey, referrer, null, null, tempObject);
+			var privacyContext = doc.defaultView.QueryInterface(Components.interfaces.nsIInterfaceRequestor).getInterface(Components.interfaces.nsIWebNavigation).QueryInterface(Components.interfaces.nsILoadContext);
+
+			persist.saveURI(uri, cachekey, referrer, null, null, tempObject, privacyContext);
 		}
 		catch(err) {
 			com.neocodenetworks.faextender.Base.logException(err);

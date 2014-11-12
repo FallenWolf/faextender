@@ -17,7 +17,7 @@ com.neocodenetworks.faextender.Base = {
 		
 		// Components.utils.import("resource://faextender/jquery-1.7.min.js", jQueryEnv); // This doesn't work for some reason
 		var loader = Components.classes["@mozilla.org/moz/jssubscript-loader;1"].getService(Components.interfaces.mozIJSSubScriptLoader);  
-		loader.loadSubScript("resource://faextender/jquery-1.7.min.js", jQueryEnv);
+		loader.loadSubScript("resource://faextender/jquery-1.7.2.min.js", jQueryEnv);
 		
 		var jQuery = jQueryEnv.window.jQuery;
 		
@@ -78,6 +78,31 @@ com.neocodenetworks.faextender.Base = {
 	// Wrap xpath handling
 	getXPath: function(doc, path) {
 		return doc.evaluate(path, doc, null, XPathResult.FIRST_ORDERED_NODE_TYPE, null).singleNodeValue;
+	},
+
+	getDownloadLink: function(doc, jQuery) {
+		var downloadLink = jQuery("#submission div.actions b a:contains('Download')");
+		if (downloadLink.length == 0) {
+			// No download at all
+			com.neocodenetworks.faextender.Base.logError("Could not find download link, aborting");
+			return null;
+		}
+		
+		return downloadLink;
+	},
+
+	// Handle retrieving download URL
+	getDownloadUrl: function(doc, jQuery) {
+		var downloadLink = com.neocodenetworks.faextender.Base.getDownloadLink(doc, jQuery);
+		
+		var url = downloadLink.attr("href");
+		
+		// Fix protocol-less URLs
+		if (url.substr(0, 2) == "//") {
+			url = doc.location.protocol + url;
+		}
+		
+		return url;
 	},
 
 	// Log an error

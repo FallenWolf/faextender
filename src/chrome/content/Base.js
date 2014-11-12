@@ -5,6 +5,8 @@ if (!com.neocodenetworks) { com.neocodenetworks = {}; }
 if (!com.neocodenetworks.faextender) { com.neocodenetworks.faextender = {}; }
 
 com.neocodenetworks.faextender.Base = {
+	isDebug: false,
+
 	// Get a jQuery instance
 	getjQuery: function(doc) {
 		// Load directly into our injection window
@@ -17,7 +19,7 @@ com.neocodenetworks.faextender.Base = {
 		
 		// Components.utils.import("resource://faextender/jquery-1.7.min.js", jQueryEnv); // This doesn't work for some reason
 		var loader = Components.classes["@mozilla.org/moz/jssubscript-loader;1"].getService(Components.interfaces.mozIJSSubScriptLoader);  
-		loader.loadSubScript("resource://faextender/jquery-1.7.2.min.js", jQueryEnv);
+		loader.loadSubScript("resource://faextender/jquery-1.7.min.js", jQueryEnv);
 		
 		var jQuery = jQueryEnv.window.jQuery;
 		
@@ -94,19 +96,47 @@ com.neocodenetworks.faextender.Base = {
 	// Handle retrieving download URL
 	getDownloadUrl: function(doc, jQuery) {
 		var downloadLink = com.neocodenetworks.faextender.Base.getDownloadLink(doc, jQuery);
-		
-		var url = downloadLink.attr("href");
-		
-		// Fix protocol-less URLs
-		if (url.substr(0, 2) == "//") {
-			url = doc.location.protocol + url;
-		}
-		
+		var url = downloadLink[0].href;
 		return url;
+	},
+
+	// Handle retrieving download URL
+	getDownloadUrlComponents: function(doc, jQuery) {
+		var downloadLink = com.neocodenetworks.faextender.Base.getDownloadLink(doc, jQuery);
+		if (!downloadLink || downloadLink.length == 0) {
+			return null;
+		}
+
+		var components = downloadLink[0];
+		
+		var url = components.href;
+		var path = components.pathname;
+
+		if (!url || !path) {
+			return null;
+		}
+
+		var artistLink = jQuery(com.neocodenetworks.faextender.Base.getXPath(doc, "id('submission')/table/tbody/tr[1]/td/table/tbody/tr[2]/td/table[2]/tbody/tr[1]/td[1]/a"));
+		if (artistLink.length == 0) {
+			// Can't find artist link
+			com.neocodenetworks.faextender.Base.logError("Could not find artist xpath");
+			return null;
+		}
+
+		var artistPath = artistLink.attr("href");
+		var artist = artistPath.replace("/user/", "").replace("/", "");
+		var prettyArtist = artistLink.text();
+
+		var fname = path.substr(path.lastIndexOf("/") + 1);
+		var fext = fname.substr(fname.lastIndexOf(".") + 1);
+
+		return { "url": url, "path": path, "artist": artist, "pretty_artist": prettyArtist, "filename": fname, "extension": fext };
 	},
 
 	// Log an error
 	logError: function(msg) {
+		if (!com.neocodenetworks.faextender.Base.isDebug) return;
+
 		var consoleService = Components.classes["@mozilla.org/consoleservice;1"].getService(Components.interfaces.nsIConsoleService);
 		consoleService.logStringMessage("FAExtender error: " + msg);
 	},
@@ -114,6 +144,8 @@ com.neocodenetworks.faextender.Base = {
 		com.neocodenetworks.faextender.Base.logError(err.name + " error @ line " + err.lineNumber + ":\r\n" + err.message);
 	},
 	debugMsg: function(msg, obj) {
+		if (!com.neocodenetworks.faextender.Base.isDebug) return;
+
 		var consoleService = Components.classes["@mozilla.org/consoleservice;1"].getService(Components.interfaces.nsIConsoleService);
 		consoleService.logStringMessage("FAExtender debug: " + msg);
 		
